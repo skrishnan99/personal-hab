@@ -11,8 +11,12 @@ import matplotlib.pyplot as plt
 import time
 import os
 import copy
+from sklearn.metrics import confusion_matrix
 
 plt.ion() 
+
+os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+os.environ["CUDA_VISIBLE_DEVICES"] = "2"
 
 # Data augmentation and normalization for training
 # Just normalization for validation
@@ -75,6 +79,13 @@ def train_model(model, criterion, optimizer, scheduler, num_epochs=25):
 
     best_model_wts = copy.deepcopy(model.state_dict())
     best_acc = 0.0
+    best_loss = 0.0
+    best_labels = np.array([])
+    best_preds = np.array([])
+    total_train_acc = np.array([])
+    total_val_acc = np.array([])
+    total_train_loss = np.array([])
+    tota_val_loss = np.array([])
 
     for epoch in range(num_epochs):
         print('Epoch {}/{}'.format(epoch, num_epochs - 1))
@@ -90,6 +101,9 @@ def train_model(model, criterion, optimizer, scheduler, num_epochs=25):
 
             running_loss = 0.0
             running_corrects = 0
+
+            running_labels = np.array([])
+            running_preds = np.array([])
 
             # Iterate over data.
             for inputs, labels in dataloaders[phase]:
@@ -115,8 +129,18 @@ def train_model(model, criterion, optimizer, scheduler, num_epochs=25):
                 running_loss += loss.item() * inputs.size(0)
                 running_corrects += torch.sum(preds == labels.data)
 
+                running_preds = np.append(running_preds, preds)
+                running_labels = np.append(running_labels, labels)
+
             epoch_loss = running_loss / dataset_sizes[phase]
             epoch_acc = running_corrects.double() / dataset_sizes[phase]
+
+            if phase == "train":
+                total_train_acc = np.append(total_train_acc, epoch_acc)
+                total_train_loss = np.append(total_train_loss, epoch_loss)
+            else:
+                total_val_acc = np.append(total_val_acc, epoch_acc)
+                tota_val_loss = np.append(tota_val_loss, epoch_loss)
 
             print('{} Loss: {:.4f} Acc: {:.4f}'.format(
                 phase, epoch_loss, epoch_acc))
@@ -124,7 +148,11 @@ def train_model(model, criterion, optimizer, scheduler, num_epochs=25):
             # deep copy the model
             if phase == 'val' and epoch_acc > best_acc:
                 best_acc = epoch_acc
+                best_loss = epoch_loss
                 best_model_wts = copy.deepcopy(model.state_dict())
+                best_preds = running_preds
+                best_labels = running_labels
+                conf_matrix = confusion_matrix(best_labels, best_preds) 
 
         print()
 
@@ -132,6 +160,11 @@ def train_model(model, criterion, optimizer, scheduler, num_epochs=25):
     print('Training complete in {:.0f}m {:.0f}s'.format(
         time_elapsed // 60, time_elapsed % 60))
     print('Best val Acc: {:4f}'.format(best_acc))
+    print('Best val Loss: {:4f}'.format(best_loss))
+    print('Confusion Matrix: {}'.format(conf_matrix))
+
+
+
 
     # load best model weights
     model.load_state_dict(best_model_wts)
@@ -157,5 +190,5 @@ optimizer_conv = optim.SGD(model_conv.fc.parameters(), lr=0.001, momentum=0.9)
 exp_lr_scheduler = lr_scheduler.StepLR(optimizer_conv, step_size=7, gamma=0.1)
 
 model_conv = train_model(model_conv, criterion, optimizer_conv,
-                         exp_lr_scheduler, num_epochs=5)
+                         exp_lr_scheduler, num_epochs=10)
 
