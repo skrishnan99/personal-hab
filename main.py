@@ -12,11 +12,17 @@ import time
 import os
 import copy
 from sklearn.metrics import confusion_matrix
+from tensorboardX import SummaryWriter
 
 plt.ion() 
 
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
 os.environ["CUDA_VISIBLE_DEVICES"] = "2"
+
+
+#TODO Test the tensorboardX code
+writer = SummaryWriter('tensorboardX/exp-1')
+
 
 # Data augmentation and normalization for training
 # Just normalization for validation
@@ -60,7 +66,7 @@ def imshow(inp, title=None):
     plt.imshow(inp)
     if title is not None:
         plt.title(title)
-    plt.pause(0.0001)  # pause a bit so that plots are updated
+    plt.pause(10)  # pause a bit so that plots are updated
 
 
 # Get a batch of training data
@@ -95,9 +101,12 @@ def train_model(model, criterion, optimizer, scheduler, num_epochs=25):
         for phase in ['train', 'val']:
             if phase == 'train':
                 scheduler.step()
-                model.train()  # Set model to training mode
+
+                # Set model to training mode
+                model.train()  
             else:
-                model.eval()   # Set model to evaluate mode
+                # Set model to evaluate mode
+                model.eval()   
 
             running_loss = 0.0
             running_corrects = 0
@@ -138,9 +147,16 @@ def train_model(model, criterion, optimizer, scheduler, num_epochs=25):
             if phase == "train":
                 total_train_acc = np.append(total_train_acc, epoch_acc)
                 total_train_loss = np.append(total_train_loss, epoch_loss)
+
+                writer.add_scalar('train-acc', epoch_acc, epoch)
+                writer.add_scalar('train-loss', epoch_loss, epoch)
+
             else:
                 total_val_acc = np.append(total_val_acc, epoch_acc)
                 tota_val_loss = np.append(tota_val_loss, epoch_loss)
+
+                writer.add_scalar('val-acc', epoch_acc, epoch)
+                writer.add_scalar('val-loss', epoch_loss, epoch)
 
             print('{} Loss: {:.4f} Acc: {:.4f}'.format(
                 phase, epoch_loss, epoch_acc))
@@ -163,16 +179,15 @@ def train_model(model, criterion, optimizer, scheduler, num_epochs=25):
     print('Best val Loss: {:4f}'.format(best_loss))
     print('Confusion Matrix: {}'.format(conf_matrix))
 
-
-
-
     # load best model weights
     model.load_state_dict(best_model_wts)
     return model
 
 model_conv = torchvision.models.resnet18(pretrained=True)
-for param in model_conv.parameters():
-    param.requires_grad = False
+
+# use this code if you want to freeze the conv layer weights
+# for param in model_conv.parameters():
+#     param.requires_grad = False
 
 # Parameters of newly constructed modules have requires_grad=True by default
 num_ftrs = model_conv.fc.in_features
@@ -182,13 +197,11 @@ model_conv = model_conv.to(device)
 
 criterion = nn.CrossEntropyLoss()
 
-# Observe that only parameters of final layer are being optimized as
-# opposed to before.
 optimizer_conv = optim.SGD(model_conv.fc.parameters(), lr=0.001, momentum=0.9)
 
 # Decay LR by a factor of 0.1 every 7 epochs
 exp_lr_scheduler = lr_scheduler.StepLR(optimizer_conv, step_size=7, gamma=0.1)
 
 model_conv = train_model(model_conv, criterion, optimizer_conv,
-                         exp_lr_scheduler, num_epochs=10)
+                         exp_lr_scheduler, num_epochs=25)
 
