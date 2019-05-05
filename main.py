@@ -13,6 +13,9 @@ import os
 import copy
 from sklearn.metrics import confusion_matrix
 from tensorboardX import SummaryWriter
+import logging
+
+logging.basicConfig(filename="app.log", filemode="w", level = logging.INFO, format="%(name)s - %(levelname)s - %(message)s")
 
 plt.ion() 
 
@@ -54,7 +57,7 @@ class_names = image_datasets['train'].classes
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-print(device)
+logging.info("Device: {}".format(device))
 
 def imshow(inp, title=None):
     """Imshow for Tensor."""
@@ -80,6 +83,12 @@ imshow(out, title=[class_names[x] for x in classes])
 def train_model(model, criterion, optimizer, scheduler, num_epochs=25):
 
     #TODO implement early stopping
+
+    logging.info("Model Architecture - {}".format(model))
+    logging.info("Criterion - {}".format(criterion))
+    logging.info("Optimizer - {}".format(optimizer))
+    logging.info("Scheduler - {}".format(scheduler))
+    logging.info("Num epochs - {}".format(num_epochs))
 
     since = time.time()
 
@@ -166,6 +175,7 @@ def train_model(model, criterion, optimizer, scheduler, num_epochs=25):
                 best_acc = epoch_acc
                 best_loss = epoch_loss
                 best_model_wts = copy.deepcopy(model.state_dict())
+                torch.save(model.state_dict(), "./best_model.pth")
                 best_preds = running_preds
                 best_labels = running_labels
                 conf_matrix = confusion_matrix(best_labels, best_preds) 
@@ -179,15 +189,25 @@ def train_model(model, criterion, optimizer, scheduler, num_epochs=25):
     print('Best val Loss: {:4f}'.format(best_loss))
     print('Confusion Matrix: {}'.format(conf_matrix))
 
+    logging.info('Training complete in {:.0f}m {:.0f}s'.format(
+        time_elapsed // 60, time_elapsed % 60))
+    logging.info('Best val Acc: {:4f}'.format(best_acc))
+    logging.info('Best val Loss: {:4f}'.format(best_loss))
+    logging.info('Confusion Matrix: {}'.format(conf_matrix))
+
     # load best model weights
     model.load_state_dict(best_model_wts)
     return model
 
 model_conv = torchvision.models.resnet18(pretrained=True)
 
+logging.info("Model Name: {}".format("resnet18"))
+
 # use this code if you want to freeze the conv layer weights
 # for param in model_conv.parameters():
 #     param.requires_grad = False
+
+logging.info("Froze Conv Layers: {}".format("False"))
 
 # Parameters of newly constructed modules have requires_grad=True by default
 num_ftrs = model_conv.fc.in_features
@@ -197,11 +217,12 @@ model_conv = model_conv.to(device)
 
 criterion = nn.CrossEntropyLoss()
 
-optimizer_conv = optim.SGD(model_conv.fc.parameters(), lr=0.001, momentum=0.9)
+# optimizer_conv = optim.SGD(model_conv.fc.parameters(), lr=0.001, momentum=0.9)
+optimizer_conv = optim.Adam(model_conv.fc.parameters(), lr=0.001)
 
 # Decay LR by a factor of 0.1 every 7 epochs
 exp_lr_scheduler = lr_scheduler.StepLR(optimizer_conv, step_size=7, gamma=0.1)
 
 model_conv = train_model(model_conv, criterion, optimizer_conv,
-                         exp_lr_scheduler, num_epochs=25)
+                         exp_lr_scheduler, num_epochs=50)
 
