@@ -12,6 +12,7 @@ import time
 import os
 import copy
 from sklearn.metrics import confusion_matrix
+from sklearn.utils.multiclass import unique_labels
 from tensorboardX import SummaryWriter
 import logging
 
@@ -78,7 +79,84 @@ inputs, classes = next(iter(dataloaders['train']))
 # Make a grid from batch
 out = torchvision.utils.make_grid(inputs)
 
-imshow(out, title=[class_names[x] for x in classes])
+# imshow(out, title=[class_names[x] for x in classes])
+
+
+def data_stats(data_path):
+    stats_dict = dict()
+    dirs = os.listdir( data_path )
+    for sub_dir in dirs:
+        stats_dict[sub_dir] = dict()
+        sub_dir_path = os.path.join(data_path, sub_dir)
+        for each in os.listdir(sub_dir_path):
+            class_path = os.path.join(sub_dir_path, each)
+            stats_dict[sub_dir][each] = len(os.listdir(class_path))
+    return stats_dict
+
+print(data_stats(data_dir))
+logging.info("Data Stats: {}".format(data_stats(data_dir)))
+
+def plot_confusion_matrix(y_true, y_pred, classes,
+                          normalize=False,
+                          title=None,
+                          cmap=plt.cm.Blues):
+    """
+    This function prints and plots the confusion matrix.
+    Normalization can be applied by setting `normalize=True`.
+    """
+    if not title:
+        if normalize:
+            title = 'Normalized confusion matrix'
+        else:
+            title = 'Confusion matrix, without normalization'
+
+    # Compute confusion matrix
+    cm = confusion_matrix(y_true, y_pred)
+    # Only use the labels that appear in the data
+    # classes = classes[unique_labels(y_true, y_pred)]
+    if normalize:
+        cm = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
+        print("Normalized confusion matrix")
+    else:
+        print('Confusion matrix, without normalization')
+
+    print(cm)
+
+    fig, ax = plt.subplots()
+    im = ax.imshow(cm, interpolation='nearest', cmap=cmap)
+    ax.figure.colorbar(im, ax=ax)
+    # We want to show all ticks...
+    ax.set(xticks=np.arange(cm.shape[1]),
+           yticks=np.arange(cm.shape[0]),
+           # ... and label them with the respective list entries
+           xticklabels=classes, yticklabels=classes,
+           title=title,
+           ylabel='True label',
+           xlabel='Predicted label')
+
+    # Rotate the tick labels and set their alignment.
+    plt.setp(ax.get_xticklabels(), rotation=45, ha="right",
+             rotation_mode="anchor")
+
+    # Loop over data dimensions and create text annotations.
+    fmt = '.2f' if normalize else 'd'
+    thresh = cm.max() / 2.
+    for i in range(cm.shape[0]):
+        for j in range(cm.shape[1]):
+            ax.text(j, i, format(cm[i, j], fmt),
+                    ha="center", va="center",
+                    color="white" if cm[i, j] > thresh else "black")
+    fig.tight_layout()
+    plt.savefig('confusion-matrix.png')
+    return ax
+
+
+
+
+
+
+
+
 
 def train_model(model, criterion, optimizer, scheduler, num_epochs=25):
 
@@ -178,10 +256,13 @@ def train_model(model, criterion, optimizer, scheduler, num_epochs=25):
                 torch.save(model.state_dict(), "./best_model.pth")
                 best_preds = running_preds
                 best_labels = running_labels
-                conf_matrix = confusion_matrix(best_labels, best_preds) 
+                print("type: {}".format(type(best_labels)))
+                print("shape: {}".format(best_labels.shape))
 
         print()
 
+    conf_matrix = plot_confusion_matrix(best_labels, best_preds, classes=class_names,
+                      title='Confusion matrix, without normalization')
     time_elapsed = time.time() - since
     print('Training complete in {:.0f}m {:.0f}s'.format(
         time_elapsed // 60, time_elapsed % 60))
@@ -197,6 +278,8 @@ def train_model(model, criterion, optimizer, scheduler, num_epochs=25):
 
     # load best model weights
     model.load_state_dict(best_model_wts)
+    plt.show()
+    plt.pause(10)
     return model
 
 model_conv = torchvision.models.resnet18(pretrained=True)
@@ -204,10 +287,10 @@ model_conv = torchvision.models.resnet18(pretrained=True)
 logging.info("Model Name: {}".format("resnet18"))
 
 # use this code if you want to freeze the conv layer weights
-# for param in model_conv.parameters():
-#     param.requires_grad = False
+for param in model_conv.parameters():
+    param.requires_grad = False
 
-logging.info("Froze Conv Layers: {}".format("False"))
+logging.info("Froze Conv Layers: {}".format("True"))
 
 # Parameters of newly constructed modules have requires_grad=True by default
 num_ftrs = model_conv.fc.in_features
@@ -225,4 +308,12 @@ exp_lr_scheduler = lr_scheduler.StepLR(optimizer_conv, step_size=7, gamma=0.1)
 
 model_conv = train_model(model_conv, criterion, optimizer_conv,
                          exp_lr_scheduler, num_epochs=50)
+
+
+
+
+
+
+
+
 
